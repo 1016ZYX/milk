@@ -56,6 +56,7 @@ var groupChatSettings = (function() {
 })();
 var _groupMemberAvatarDataUrl = null;
 
+// ==== 修改点 1：保存时增加 hidden 字段 ====
 function saveGroupChatSettings() {
     var members = groupChatSettings.members || [];
     var toSave = {
@@ -64,7 +65,12 @@ function saveGroupChatSettings() {
         showName: groupChatSettings.showName,
         members: members.map(function(m) {
             if (!m.id) m.id = 'gcm_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
-            return { name: m.name, id: m.id, avatarRef: 'gca_' + m.id };
+            return {
+                name: m.name,
+                id: m.id,
+                hidden: !!m.hidden,          // 新增
+                avatarRef: 'gca_' + m.id
+            };
         })
     };
     try {
@@ -82,6 +88,7 @@ function saveGroupChatSettings() {
     }
 }
 
+// ==== 修改点 2：成员列表中添加“隐藏/显示”按钮 ====
 function renderGroupMembersList() {
     var list = document.getElementById('group-members-list');
     if (!list) return;
@@ -96,6 +103,10 @@ function renderGroupMembersList() {
         return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--primary-bg);border:1px solid var(--border-color);border-radius:10px;">'
             + avatarHtml
             + '<span style="flex:1;font-size:13px;font-weight:500;">' + (m.name || '成员' + (i+1)) + '</span>'
+            // 新增隐藏/显示按钮
+            + '<button onclick="toggleMemberHidden(' + i + ')" style="background:none;border:none;cursor:pointer;font-size:12px;color:' + (m.hidden ? '#ff4757' : 'var(--text-secondary)') + ';padding:4px 8px;border-radius:4px;' + (m.hidden ? 'background:rgba(255,71,87,0.1);' : '') + '">'
+            + (m.hidden ? '显示' : '隐藏')
+            + '</button>'
             + '<button onclick="openEditGroupMember(' + i + ')" style="background:none;border:none;cursor:pointer;color:var(--accent-color);font-size:14px;padding:4px 8px;"><i class="fas fa-edit"></i></button>'
             + '<button onclick="deleteGroupMember(' + i + ')" style="background:none;border:none;cursor:pointer;color:#ff4757;font-size:14px;padding:4px 8px;"><i class="fas fa-trash-alt"></i></button>'
             + '</div>';
@@ -240,13 +251,32 @@ window.deleteGroupMember = function(idx) {
     renderGroupMembersList();
 };
 
-window.getGroupMemberForMessage = function(msgId) {
+// ==== 修改点 3：getGroupMemberForMessage 改为接收消息对象（或兼容 ID） ====
+window.getGroupMemberForMessage = function(msg) {
     if (!groupChatSettings.enabled || !groupChatSettings.members || groupChatSettings.members.length === 0) return null;
+    // 如果传入的是消息对象且包含 groupMemberId，直接查找
+    if (msg && typeof msg === 'object' && msg.groupMemberId) {
+        var member = groupChatSettings.members.find(function(m) { return m.id === msg.groupMemberId; });
+        if (member) return member;
+    }
+    // 兼容旧调用：传入 ID 字符串/数字
+    var idStr = String(msg.id !== undefined ? msg.id : msg);
     var seed = 0;
-    var idStr = String(msgId);
     for (var i = 0; i < idStr.length; i++) seed += idStr.charCodeAt(i) * (i + 1);
     return groupChatSettings.members[seed % groupChatSettings.members.length];
 };
+
+// ==== 修改点 4：新增 toggleMemberHidden 函数 ====
+window.toggleMemberHidden = function(idx) {
+    if (!groupChatSettings.members[idx]) return;
+    groupChatSettings.members[idx].hidden = !groupChatSettings.members[idx].hidden;
+    saveGroupChatSettings();
+    renderGroupMembersList();
+    // 刷新消息显示，使隐藏立即生效
+    if (typeof renderMessages === 'function') renderMessages(true);
+};
+
+// ==== 以下为原有代码（备份导出、天气编辑、搜索等，未改动） ====
 
 document.addEventListener('DOMContentLoaded', function() {
     var exportAllBtn = document.getElementById('export-all-settings');
@@ -430,15 +460,14 @@ window.startEditDgWeather = function(el) {
     });
 };
 
-    document.addEventListener('focusin', function(e) {
-        if (e.target && (e.target.classList.contains('message-input') || e.target.tagName === 'TEXTAREA')) {
-            setTimeout(function() {
-                var chat = document.querySelector('.chat-container');
-                if (chat) chat.scrollTop = chat.scrollHeight;
-            }, 100);
-        }
-    });
-
+document.addEventListener('focusin', function(e) {
+    if (e.target && (e.target.classList.contains('message-input') || e.target.tagName === 'TEXTAREA')) {
+        setTimeout(function() {
+            var chat = document.querySelector('.chat-container');
+            if (chat) chat.scrollTop = chat.scrollHeight;
+        }, 100);
+    }
+});
 
 window._runMsgSearch = function() {
     var input = document.getElementById('msg-search-input');
