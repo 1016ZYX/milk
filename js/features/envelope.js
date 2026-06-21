@@ -54,79 +54,113 @@ async function checkEnvelopeStatus() {
     }
 }
 
-function showEnvelopeReplyPopup(letter) {
+// ========== 弹窗函数（支持主动来信）==========
+function showEnvelopeReplyPopup(letter, isPartnerActive = false) {
     const existing = document.getElementById('envelope-reply-popup');
     if (existing) existing.remove();
+
+    let title, subtitle, btnText, icon;
+    if (isPartnerActive) {
+        title = '对方给你写了一封信';
+        subtitle = '点开看看写了什么吧~';
+        btnText = '立即阅读 ✉';
+        icon = '💌';
+    } else {
+        title = '收到了一封回信';
+        subtitle = 'Ta 给你写了回信，快去看看吧~';
+        btnText = '立即阅读 ✉';
+        icon = '💌';
+    }
+
     const popup = document.createElement('div');
     popup.id = 'envelope-reply-popup';
     popup.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--secondary-bg);border:1px solid var(--border-color);border-radius:20px;padding:18px 20px;z-index:8000;max-width:320px;width:88%;box-shadow:0 8px 32px rgba(0,0,0,0.18);display:flex;flex-direction:column;gap:12px;animation:slideUpNotif 0.4s cubic-bezier(0.22,1,0.36,1);';
     popup.innerHTML = `
         <style>@keyframes slideUpNotif{from{opacity:0;transform:translateX(-50%) translateY(24px) scale(0.9)}60%{transform:translateX(-50%) translateY(-4px) scale(1.02)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}</style>
         <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:26px;">💌</span>
+            <span style="font-size:26px;">${icon}</span>
             <div>
-                <div style="font-size:14px;font-weight:700;color:var(--text-primary);">收到了一封回信</div>
-                <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;opacity:0.8;">Ta 给你写了回信，快去看看吧~</div>
+                <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${title}</div>
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;opacity:0.8;">${subtitle}</div>
             </div>
         </div>
         <div style="display:flex;gap:8px;">
-            <button onclick="document.getElementById('envelope-reply-popup').remove();" style="flex:1;padding:8px 0;border-radius:12px;border:1px solid var(--border-color);background:var(--primary-bg);color:var(--text-secondary);font-size:13px;cursor:pointer;">稍后查看</button>
-            <button onclick="openEnvelopeAndViewReply('${letter.id}');" style="flex:2;padding:8px 0;border-radius:12px;border:none;background:var(--accent-color);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">立即阅读 ✉</button>
-        </div>`;
+            <button id="popup-later-btn" style="flex:1;padding:8px 0;border-radius:12px;border:1px solid var(--border-color);background:var(--primary-bg);color:var(--text-secondary);font-size:13px;cursor:pointer;">稍后</button>
+            <button id="popup-read-btn" style="flex:2;padding:8px 0;border-radius:12px;border:none;background:var(--accent-color);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">${btnText}</button>
+        </div>
+    `;
     document.body.appendChild(popup);
-    setTimeout(() => { if (popup.parentNode) popup.remove(); }, 8000);
+
+    // 使用 addEventListener 绑定事件，避免内联函数未定义
+    const laterBtn = popup.querySelector('#popup-later-btn');
+    const readBtn = popup.querySelector('#popup-read-btn');
+
+    laterBtn.addEventListener('click', function() {
+        popup.remove();
+    });
+
+    readBtn.addEventListener('click', function() {
+        popup.remove();
+        // 调用全局函数打开信件
+        if (typeof window.openEnvelopeAndViewReply === 'function') {
+            window.openEnvelopeAndViewReply(letter.id);
+        } else {
+            // 后备方案：手动打开
+            console.warn('openEnvelopeAndViewReply 未定义，使用后备逻辑');
+            const modal = document.getElementById('envelope-modal');
+            if (modal && typeof showModal === 'function') {
+                showModal(modal);
+                setTimeout(() => {
+                    switchEnvTab('inbox');
+                    setTimeout(() => viewEnvLetter('inbox', letter.id), 100);
+                }, 350);
+            } else {
+                showNotification('无法打开信件，请手动在收件箱中查看', 'warning');
+            }
+        }
+    });
+
+    // 自动关闭（8秒后）
+    setTimeout(() => {
+        if (popup.parentNode) popup.remove();
+    }, 8000);
 }
 
-const APPEARANCE_PANEL_TITLES = {
-    'theme': '主题配色', 'font': '字体设置', 'background': '聊天背景',
-    'bubble': '气泡样式', 'avatar': '聊天头像', 'css': '自定义CSS',
-    'font-bg': '背景 & 字体', 'bubble-css': '气泡 & CSS'
-};
-window.showAppearancePanel = function(panel) {
-    const panelMap = {
-        'font-bg': ['font', 'background'],
-        'bubble-css': ['bubble', 'css']
-    };
-    document.getElementById('appearance-nav-grid').style.display = 'none';
-    var unBtn = document.getElementById('update-notice-btn');
-    if (unBtn) unBtn.style.display = 'none';
-    var galleryBanner = document.getElementById('gallery-banner-entry');
-    if (galleryBanner) galleryBanner.style.display = 'none';
-    document.getElementById('appearance-panel-container').style.display = 'block';
-    document.getElementById('appearance-panel-title').textContent = APPEARANCE_PANEL_TITLES[panel] || panel;
-    document.querySelectorAll('.appearance-sub-panel').forEach(p => p.style.display = 'none');
-    if (panelMap[panel]) {
-        panelMap[panel].forEach(sub => {
-            const target = document.getElementById('appearance-panel-' + sub);
-            if (target) target.style.display = 'block';
-        });
-    } else {
-        const target = document.getElementById('appearance-panel-' + panel);
-        if (target) target.style.display = 'block';
-    }
-    if (panel === 'bubble' || panel === 'bubble-css') { setTimeout(() => { if (typeof window.updateBubblePreviewFn === 'function') window.updateBubblePreviewFn(); }, 50); }
-};
-window.hideAppearancePanel = function() {
-    document.getElementById('appearance-nav-grid').style.display = 'grid';
-    document.getElementById('appearance-panel-container').style.display = 'none';
-    document.querySelectorAll('.appearance-sub-panel').forEach(p => p.style.display = 'none');
-    var unBtn = document.getElementById('update-notice-btn');
-    if (unBtn) unBtn.style.display = 'flex';
-    var galleryBanner = document.getElementById('gallery-banner-entry');
-    if (galleryBanner) galleryBanner.style.display = 'flex';
-};
-
+// ========== 增强版 openEnvelopeAndViewReply ==========
 window.openEnvelopeAndViewReply = function(replyId) {
     const popup = document.getElementById('envelope-reply-popup');
     if (popup) popup.remove();
+
     const envelopeModal = document.getElementById('envelope-modal');
-    showModal(envelopeModal);
+    if (!envelopeModal) {
+        console.error('信封模态框不存在');
+        showNotification('无法打开信封，请刷新页面重试', 'error');
+        return;
+    }
+
+    // 显示模态框
+    if (typeof showModal === 'function') {
+        showModal(envelopeModal);
+    } else {
+        console.error('showModal 未定义');
+        envelopeModal.style.display = 'flex';
+    }
+
+    // 等待动画完成
     setTimeout(() => {
-        switchEnvTab('inbox');
-        viewEnvLetter('inbox', replyId);
-    }, 200);
+        try {
+            switchEnvTab('inbox');
+            setTimeout(() => {
+                viewEnvLetter('inbox', replyId);
+            }, 100);
+        } catch (e) {
+            console.error('打开信件失败:', e);
+            showNotification('打开信件失败，请手动在收件箱中查看', 'warning');
+        }
+    }, 350);
 };
 
+// ========== 生成回信内容 ==========
 function generateEnvelopeReplyText() {
     const sourcePool = [...customReplies];
     const sentenceCount = Math.floor(Math.random() * (12 - 8 + 1)) + 8;
@@ -139,7 +173,7 @@ function generateEnvelopeReplyText() {
     return replyContent;
 }
 
-
+// ========== 切换标签页 ==========
 window.switchEnvTab = function(tab) {
     currentEnvTab = tab;
     document.getElementById('env-tab-outbox').classList.toggle('active', tab === 'outbox');
@@ -151,6 +185,7 @@ window.switchEnvTab = function(tab) {
     renderEnvelopeLists();
 };
 
+// ========== 渲染列表 ==========
 function renderEnvelopeLists() {
     renderOutboxList();
     renderInboxList();
@@ -222,6 +257,7 @@ function renderInboxList() {
         const preview = letter.content.length > 50 ? letter.content.substring(0, 50) + '…' : letter.content;
         const isNew = letter.isNew;
         const origPreview = letter.originalContent ? (letter.originalContent.length > 32 ? letter.originalContent.substring(0, 32) + '…' : letter.originalContent) : '';
+        const fromPartner = letter.fromPartner ? '💌 对方来信' : '';
         return `
         <div class="env-letter-item reply ${isNew ? 'env-letter-new' : ''}" onclick="viewEnvLetter('inbox','${letter.id}')">
             <div class="env-letter-header">
@@ -229,6 +265,7 @@ function renderInboxList() {
                     <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:3px;"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
                     收到 · ${date}
                     ${isNew ? '<span style="background:rgba(255,255,255,0.3);color:#fff;font-size:9px;padding:1px 5px;border-radius:6px;margin-left:6px;">新</span>' : ''}
+                    ${fromPartner ? `<span style="background:rgba(255,200,0,0.3);color:#fff;font-size:9px;padding:1px 5px;border-radius:6px;margin-left:6px;">💌</span>` : ''}
                 </div>
                 <div class="env-stamp">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -245,6 +282,7 @@ function renderInboxList() {
     }).join('');
 }
 
+// ========== 查看信件 ==========
 window.viewEnvLetter = function(section, id) {
     const letters = section === 'outbox' ? envelopeData.outbox : envelopeData.inbox;
     const letter = letters.find(l => l.id === id);
@@ -323,6 +361,7 @@ window.viewEnvLetter = function(section, id) {
     showModal(document.getElementById('envelope-view-modal'));
 };
 
+// ========== 编辑信件 ==========
 window.toggleEnvEdit = function() {
     const contentEl = document.getElementById('env-view-content');
     const editEl = document.getElementById('env-view-edit');
@@ -419,3 +458,101 @@ function handleSendEnvelope() {
     showNotification(`信件已寄出，预计 ${Math.floor(randomHours)} 小时后收到回信 ✉️`, 'success');
 }
 
+// ===================== 对方主动写信功能 =====================
+
+/**
+ * 生成一封由对方寄出的信，直接放入 inbox
+ * @param {string} content - 可选，若不传则自动生成
+ */
+window.partnerSendLetter = function(content) {
+    if (!content) {
+        const sourcePool = (typeof customReplies !== 'undefined' && customReplies.length > 0)
+            ? customReplies
+            : (window._customReplies || []);
+        if (sourcePool.length === 0) {
+            showNotification('回复库为空，无法生成信件', 'warning');
+            return;
+        }
+        const sentenceCount = 8 + Math.floor(Math.random() * 5);
+        let parts = [];
+        for (let i = 0; i < sentenceCount; i++) {
+            const picked = sourcePool[Math.floor(Math.random() * sourcePool.length)];
+            const punctuation = Math.random() < 0.2 ? '！' : (Math.random() < 0.2 ? '...' : '。');
+            parts.push(picked + punctuation);
+        }
+        content = parts.join(' ');
+    }
+
+    const letter = {
+        id: 'partner_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        content: content,
+        receivedTime: Date.now(),
+        isNew: true,
+        fromPartner: true
+    };
+    envelopeData.inbox.push(letter);
+    saveEnvelopeData();
+
+    renderEnvelopeLists();
+
+    if (typeof playSound === 'function') playSound('message');
+
+    showEnvelopeReplyPopup(letter, true);
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+        const partnerName = (typeof settings !== 'undefined' && settings.partnerName) || '梦角';
+        try {
+            const notif = new Notification('💌 来自 ' + partnerName + ' 的一封信', {
+                body: '你收到了一封新信，点击查看',
+                icon: (typeof getAvSrc === 'function' ? getAvSrc() : undefined),
+                tag: 'partner-letter',
+                requireInteraction: true
+            });
+            notif.onclick = function() {
+                window.focus();
+                this.close();
+                const modal = document.getElementById('envelope-modal');
+                if (modal && typeof showModal === 'function') showModal(modal);
+                setTimeout(() => switchEnvTab('inbox'), 300);
+            };
+        } catch (e) {
+            console.warn('通知发送失败:', e);
+        }
+    }
+
+    if (typeof showNotification === 'function') {
+        showNotification('📨 收到了一封来自对方的信', 'info', 4000);
+    }
+};
+
+// ========== 定时器 ==========
+let partnerLetterTimer = null;
+
+function schedulePartnerLetter() {
+    clearTimeout(partnerLetterTimer);
+    const minHours = 18;
+    const maxHours = 48;
+    const delayMs = (minHours + Math.random() * (maxHours - minHours)) * 60 * 60 * 1000;
+    partnerLetterTimer = setTimeout(() => {
+        if (typeof S !== 'undefined' && S.active) {
+            schedulePartnerLetter();
+            return;
+        }
+        window.partnerSendLetter();
+        schedulePartnerLetter();
+    }, delayMs);
+}
+
+function initPartnerLetterTimer() {
+    if (typeof envelopeData !== 'undefined') {
+        schedulePartnerLetter();
+    } else {
+        setTimeout(initPartnerLetterTimer, 1000);
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPartnerLetterTimer);
+} else {
+    initPartnerLetterTimer();
+}
