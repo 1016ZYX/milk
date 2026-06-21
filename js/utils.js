@@ -1,4 +1,4 @@
-        function safeGetItem(key) {
+function safeGetItem(key) {
             try { return localStorage.getItem(key); }
             catch (e) { console.error('Error getting item:', e); return null; }
         }
@@ -131,10 +131,46 @@ function deduplicateContentArray(arr, baseSystemArray = []) {
             } catch(e) {}
         };
 
+        // ===================== 修改点：增加 incoming_call 音效 =====================
         const playSound = (type) => {
             if (!settings.soundEnabled) return;
             stopCurrentSound();
             try {
+                // --- 新增：来电铃声专用分支 ---
+                if (type === 'incoming_call') {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    _currentAudioContext = ctx;
+                    const gain = ctx.createGain();
+                    gain.connect(ctx.destination);
+                    gain.gain.value = Math.min(0.4, settings.soundVolume || 0.15);
+
+                    const playTone = (freq, duration, delay) => {
+                        const osc = ctx.createOscillator();
+                        osc.type = 'square';
+                        osc.frequency.value = freq;
+                        osc.connect(gain);
+                        osc.start(ctx.currentTime + delay);
+                        osc.stop(ctx.currentTime + delay + duration);
+                    };
+
+                    // 铃声模式：440Hz 响 0.15s，静 0.15s，再 480Hz 响 0.15s，静 0.15s，重复一次
+                    const pattern = [
+                        [440, 0.15, 0],
+                        [480, 0.15, 0.3],
+                        [440, 0.15, 0.6],
+                        [480, 0.15, 0.9]
+                    ];
+                    pattern.forEach(([freq, dur, delay]) => {
+                        playTone(freq, dur, delay);
+                    });
+                    setTimeout(() => {
+                        if (ctx.state !== 'closed') ctx.close();
+                        _currentAudioContext = null;
+                    }, 1500);
+                    return;
+                }
+                // --- 新增结束 ---
+
                 // =============== 两方音效配置 ===============
                 const category = (() => {
                     // 新类型（按两方区分）

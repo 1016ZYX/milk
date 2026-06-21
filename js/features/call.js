@@ -659,6 +659,7 @@ html:not([data-theme="dark"])[data-color-theme="black-white"] .message-sent{
             showNotification('通话已挂断', 'info', 2000);
     }
 
+    // ========== 修改点：增加系统通知和铃声 ==========
     function showIncomingCall() {
         if (!S.enabled || S.active) return;
         const ov = document.getElementById('call-incoming-overlay');
@@ -666,6 +667,38 @@ html:not([data-theme="dark"])[data-color-theme="black-white"] .message-sent{
         fillAv('call-inc-avatar'); fillNm('call-inc-name');
         ov.classList.add('visible');
         clearTimeout(S.incomingTimer);
+
+        // --- 新增：系统通知和铃声 ---
+        // 1. 来电铃声
+        if (typeof playSound === 'function') {
+            playSound('incoming_call');
+        }
+
+        // 2. 系统通知（即使页面在前台也尝试发送）
+        if ('Notification' in window && Notification.permission === 'granted') {
+            const partnerName = getName();
+            try {
+                const notif = new Notification('📞 来自 ' + partnerName + ' 的视频通话', {
+                    body: '对方邀请您进行视频通话，点击接听',
+                    icon: getAvSrc() || undefined,
+                    tag: 'call-incoming',
+                    requireInteraction: true,
+                    silent: false
+                });
+                notif.onclick = function() {
+                    window.focus();
+                    this.close();
+                };
+            } catch (e) {
+                console.warn('系统通知发送失败:', e);
+            }
+        }
+
+        // 3. 可选震动（移动端）
+        if (navigator.vibrate) {
+            navigator.vibrate([200, 100, 200, 100, 400]);
+        }
+        // --- 新增结束 ---
 
         const autoRejectChance = 0.30;
         if (Math.random() < autoRejectChance) {
@@ -693,6 +726,7 @@ html:not([data-theme="dark"])[data-color-theme="black-white"] .message-sent{
             }, 22000);
         }
     }
+    // ========== 修改结束 ==========
 
     function scheduleRandomCall() {
         clearTimeout(S.randomCallTimer);
