@@ -530,8 +530,8 @@ let partnerLetterTimer = null;
 
 function schedulePartnerLetter() {
     clearTimeout(partnerLetterTimer);
-    const minHours = 18;
-    const maxHours = 48;
+    const minHours = 5;
+    const maxHours = 10;
     const delayMs = (minHours + Math.random() * (maxHours - minHours)) * 60 * 60 * 1000;
     partnerLetterTimer = setTimeout(() => {
         if (typeof S !== 'undefined' && S.active) {
